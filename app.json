@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Tahfeez - Learn Quran",
+    "slug": "tahfeez-quran-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./public/tahfeez-logo.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./public/tahfeez-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#10B981"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tahfeez.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./public/tahfeez-logo.png",
+        "backgroundColor": "#10B981"
+      },
+      "package": "com.tahfeez.app"
+    },
+    "web": {
+      "favicon": "./public/tahfeez-logo.png"
+    },
+    "platforms": ["ios", "android", "web"]
+  }
+}
