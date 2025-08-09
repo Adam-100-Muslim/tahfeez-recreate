@@ -1,19 +1,30 @@
 // Types pour l'application Tahfeez
 
 export interface Surah {
-  id: number;
-  name: string;
-  arabicName: string;
-  verses: number;
+  surahName: string;
+  surahNameArabic: string;
+  surahNameArabicLong: string;
+  surahNameTranslation: string;
+  revelationPlace: string;
+  totalAyah: number;
+  surahNo?: number;
   difficulty?: string;
   category?: string;
 }
 
 export interface Verse {
-  number: number;
+  surahNo: number;
+  ayahNo: number;
   arabic: string;
+  arabicWithTashkeel: string;
   translation: string;
-  words: number;
+  audio: {
+    [key: string]: {
+      reciter: string;
+      url: string;
+      originalUrl: string;
+    };
+  };
 }
 
 export interface UserProfile {
@@ -23,10 +34,12 @@ export interface UserProfile {
 }
 
 export interface Word {
+  id: number;
+  position: number;
   arabic: string;
   translation: string;
   transliteration: string;
-  position: number;
+  audio_url?: string;
 }
 
 export interface Exercise {

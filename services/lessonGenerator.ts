@@ -1,5 +1,5 @@
 // AI-powered lesson generator for Quran memorization
-import { Word, Verse } from './quranApi';
+import { Word, Ayah } from './quranApi';
 
 export interface QuestionOption {
   id: string;
@@ -31,15 +31,15 @@ export interface LessonPlan {
 
 export class LessonGenerator {
   /**
-   * Generate a complete lesson plan for a verse
+   * Generate a complete lesson plan for an ayah
    */
-  static generateLessonPlan(verse: Verse, words: Word[]): LessonPlan {
+  static generateLessonPlan(ayah: Ayah, words: Word[]): LessonPlan {
     const questions: LessonQuestion[] = [];
     let questionId = 1;
 
     // Validate inputs
-    if (!verse || !words || words.length === 0) {
-      throw new Error('Invalid verse or words data provided for lesson generation');
+    if (!ayah || !words || words.length === 0) {
+      throw new Error('Invalid ayah or words data provided for lesson generation');
     }
 
     // Filter out words with missing transliteration or text
@@ -153,9 +153,9 @@ export class LessonGenerator {
       questions[hardQuestionIndex].celebrationMessage = "Great! Attention! It's getting hard. 🔥";
     }
 
-    // Phase 5: Full verse recognition (Hard)
+    // Phase 5: Full ayah recognition (Hard)
     const fullVerseTransliteration = validWords.map(w => w.transliteration.text).join(' ');
-    const fullVerseArabic = verse.text_uthmani_simple || verse.text_uthmani || verse.text_imlaei_simple || '';
+    const fullVerseArabic = ayah.arabic1 || ayah.arabic2 || '';
 
     // Transliteration of partial verse
     if (validWords.length >= 2) {
@@ -204,7 +204,7 @@ export class LessonGenerator {
     const celebrationMilestones = [5, 10, 15, totalStrokes];
 
     return {
-      verseKey: verse.verse_key,
+      verseKey: `${ayah.surahNo}:${ayah.ayahNo}`,
       totalQuestions: questions.length,
       questions,
       totalStrokes,

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View, Text, TouchableOpacity, Image, ScrollView, ActivityIndicator, Alert } from 'react-native';
-import QuranApiService, { Chapter, Verse, Word } from './services/quranApi';
+import { Audio } from 'expo-av';
+import QuranApiService, { Surah, Ayah, Word } from './services/quranApi';
 import LessonGenerator, { LessonPlan, LessonQuestion } from './services/lessonGenerator';
 
 // Types pour la navigation
@@ -17,10 +18,10 @@ const App: React.FC = () => {
   const [selectedOption, setSelectedOption] = useState<string>('');
   
   // Quran API data
-  const [chapters, setChapters] = useState<Chapter[]>([]);
-  const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
-  const [verses, setVerses] = useState<Verse[]>([]);
-  const [selectedVerse, setSelectedVerse] = useState<Verse | null>(null);
+  const [chapters, setChapters] = useState<Surah[]>([]);
+  const [selectedChapter, setSelectedChapter] = useState<Surah | null>(null);
+  const [verses, setVerses] = useState<Ayah[]>([]);
+  const [selectedVerse, setSelectedVerse] = useState<Ayah | null>(null);
   const [selectedVerseWords, setSelectedVerseWords] = useState<Word[]>([]);
   const [loading, setLoading] = useState(false);
   
@@ -30,6 +31,11 @@ const App: React.FC = () => {
   const [lessonAnswers, setLessonAnswers] = useState<Record<string, string>>({});
   const [score, setScore] = useState(0);
   const [totalStrokes, setTotalStrokes] = useState(0);
+  
+  // Audio data
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audioLoading, setAudioLoading] = useState(false);
 
   // Questions for the Get Started screen
   const questions = [
@@ -70,11 +76,20 @@ const App: React.FC = () => {
     loadChapters();
   }, []);
 
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, [sound]);
+
   // API functions
   const loadChapters = async () => {
     setLoading(true);
     try {
-      const chaptersData = await QuranApiService.getChapters();
+      const chaptersData = await QuranApiService.getSurahs();
       setChapters(chaptersData);
     } catch (error) {
       Alert.alert('Error', 'Failed to load Quran chapters. Please check your internet connection.');
@@ -84,16 +99,33 @@ const App: React.FC = () => {
     }
   };
 
-  const loadVerses = async (chapterId: number) => {
+  const loadVerses = async (surahNo: number) => {
     setLoading(true);
     try {
-      const versesData = await QuranApiService.getVersesByChapter(chapterId, {
-        translations: '20', // English translation
-        words: true,
-        transliteration: true,
-        perPage: 50 // Get more verses per request
-      });
-      setVerses(versesData);
+      // Get the complete surah with all verses
+      const surahData = await QuranApiService.getSurah(surahNo);
+      
+      // Transform the surah data to individual ayah objects
+      const ayahsData: Ayah[] = surahData.english.map((englishText, index) => ({
+        surahName: surahData.surahName,
+        surahNameArabic: surahData.surahNameArabic,
+        surahNameArabicLong: surahData.surahNameArabicLong,
+        surahNameTranslation: surahData.surahNameTranslation,
+        revelationPlace: surahData.revelationPlace,
+        totalAyah: surahData.totalAyah,
+        surahNo: surahData.surahNo,
+        ayahNo: index + 1,
+        audio: surahData.audio,
+        english: englishText,
+        arabic1: surahData.arabic1[index],
+        arabic2: surahData.arabic2[index],
+        bengali: surahData.bengali?.[index],
+        urdu: surahData.urdu?.[index],
+        turkish: surahData.turkish?.[index],
+        uzbek: surahData.uzbek?.[index]
+      }));
+      
+      setVerses(ayahsData);
     } catch (error) {
       Alert.alert('Error', 'Failed to load verses. Please try again.');
       console.error('Error loading verses:', error);
@@ -102,10 +134,10 @@ const App: React.FC = () => {
     }
   };
 
-  const loadVerseWords = async (chapterId: number, verseNumber: number) => {
+  const loadVerseWords = async (surahNo: number, ayahNo: number) => {
     setLoading(true);
     try {
-      const words = await QuranApiService.getWordByWordBreakdown(chapterId, verseNumber);
+      const words = await QuranApiService.getWordByWordBreakdown(surahNo, ayahNo);
       setSelectedVerseWords(words);
     } catch (error) {
       Alert.alert('Error', 'Failed to load verse details. Please try again.');
@@ -115,11 +147,11 @@ const App: React.FC = () => {
     }
   };
 
-  const generateLesson = (verse: Verse, words: Word[]) => {
+  const generateLesson = (ayah: Ayah, words: Word[]) => {
     try {
       // Additional validation before generating lesson
-      if (!verse) {
-        throw new Error('No verse selected');
+      if (!ayah) {
+        throw new Error('No ayah selected');
       }
       
       if (!words || words.length === 0) {
@@ -135,9 +167,9 @@ const App: React.FC = () => {
         throw new Error('No transliteration data available for this verse');
       }
 
-      console.log(`Generating lesson for verse ${verse.verse_key} with ${wordsWithTransliteration.length} valid words`);
+      console.log(`Generating lesson for ayah ${ayah.surahNo}:${ayah.ayahNo} with ${wordsWithTransliteration.length} valid words`);
       
-      const plan = LessonGenerator.generateLessonPlan(verse, words);
+      const plan = LessonGenerator.generateLessonPlan(ayah, words);
       setLessonPlan(plan);
       setCurrentLessonQuestion(0);
       setLessonAnswers({});
@@ -149,6 +181,59 @@ const App: React.FC = () => {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       Alert.alert('Error', `Failed to generate lesson: ${errorMessage}. Please try a different verse.`);
       console.error('Error generating lesson:', error);
+    }
+  };
+
+  // Audio functions
+  const playAudio = async () => {
+    if (!selectedVerse || !selectedChapter) return;
+    
+    try {
+      setAudioLoading(true);
+      
+      // Stop current audio if playing
+      if (sound) {
+        await sound.unloadAsync();
+        setSound(null);
+        setIsPlaying(false);
+      }
+      
+      // Get audio URL for the verse
+      const audioUrl = await QuranApiService.getAyahAudio(
+        selectedChapter.surahNo, 
+        selectedVerse.ayahNo
+      );
+      
+      console.log('Playing audio from:', audioUrl);
+      
+      // Create and load audio
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: audioUrl },
+        { shouldPlay: true }
+      );
+      
+      setSound(newSound);
+      setIsPlaying(true);
+      
+      // Set up playback status update
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setIsPlaying(false);
+        }
+      });
+      
+    } catch (error) {
+      console.error('Error playing audio:', error);
+      Alert.alert('Erreur Audio', 'Impossible de lire l\'audio. Vérifiez votre connexion internet.');
+    } finally {
+      setAudioLoading(false);
+    }
+  };
+
+  const stopAudio = async () => {
+    if (sound) {
+      await sound.stopAsync();
+      setIsPlaying(false);
     }
   };
 
@@ -370,30 +455,30 @@ const App: React.FC = () => {
         ) : (
           chapters.map((chapter) => (
             <TouchableOpacity 
-              key={chapter.id}
+              key={chapter.surahNo}
               style={styles.surahCard}
               onPress={() => handleChapterSelect(chapter)}
             >
               <View style={styles.surahCardContent}>
                 <View style={styles.surahNumber}>
-                  <Text style={styles.surahNumberText}>{chapter.id}</Text>
+                  <Text style={styles.surahNumberText}>{chapter.surahNo}</Text>
                 </View>
                 <View style={styles.surahInfo}>
-                  <Text style={styles.surahName}>{chapter.name_simple}</Text>
-                  <Text style={styles.surahTranslation}>{chapter.translated_name.name}</Text>
+                  <Text style={styles.surahName}>{chapter.surahName}</Text>
+                  <Text style={styles.surahTranslation}>{chapter.surahNameTranslation}</Text>
                   <Text style={styles.surahDetails}>
-                    {chapter.verses_count} verses • {chapter.revelation_place}
+                    {chapter.totalAyah} verses • {chapter.revelationPlace}
                   </Text>
                 </View>
                 <View style={styles.surahDifficulty}>
                   <Text style={[styles.difficultyBadge, {
-                    backgroundColor: chapter.verses_count <= 10 ? '#dcfce7' : 
-                                   chapter.verses_count <= 50 ? '#fef3c7' : '#fecaca',
-                    color: chapter.verses_count <= 10 ? '#166534' : 
-                           chapter.verses_count <= 50 ? '#92400e' : '#991b1b'
+                    backgroundColor: chapter.totalAyah <= 10 ? '#dcfce7' : 
+                                   chapter.totalAyah <= 50 ? '#fef3c7' : '#fecaca',
+                    color: chapter.totalAyah <= 10 ? '#166534' : 
+                           chapter.totalAyah <= 50 ? '#92400e' : '#991b1b'
                   }]}>
-                    {chapter.verses_count <= 10 ? 'Very Easy' : 
-                     chapter.verses_count <= 50 ? 'Medium' : 'Hard'}
+                    {chapter.totalAyah <= 10 ? 'Very Easy' : 
+                     chapter.totalAyah <= 50 ? 'Medium' : 'Hard'}
                   </Text>
                 </View>
               </View>
@@ -404,9 +489,9 @@ const App: React.FC = () => {
     </ScrollView>
   );
 
-  const handleChapterSelect = async (chapter: Chapter) => {
+  const handleChapterSelect = async (chapter: Surah) => {
     setSelectedChapter(chapter);
-    await loadVerses(chapter.id);
+    await loadVerses(chapter.surahNo);
     navigateTo('select-verse');
   };
 
@@ -430,7 +515,7 @@ const App: React.FC = () => {
 
       <View style={styles.surahContainer}>
         <Text style={styles.surahTitle}>
-          {selectedChapter?.name_simple || 'Select Verse'}
+          {selectedChapter?.surahName || 'Select Verse'}
         </Text>
         <Text style={styles.surahSubtitle}>Choose a verse to memorize</Text>
         
@@ -442,21 +527,19 @@ const App: React.FC = () => {
         ) : (
           verses.map((verse) => (
             <TouchableOpacity 
-              key={verse.id}
+              key={`${verse.surahNo}-${verse.ayahNo}`}
               style={styles.verseCard}
               onPress={() => handleVerseSelect(verse)}
             >
               <View style={styles.verseCardContent}>
                 <View style={styles.verseNumber}>
-                  <Text style={styles.verseNumberText}>{verse.verse_number}</Text>
+                  <Text style={styles.verseNumberText}>{verse.ayahNo}</Text>
                 </View>
                 <View style={styles.verseInfo}>
-                  <Text style={styles.verseArabic}>{verse.text_uthmani_simple}</Text>
-                  {verse.translations && verse.translations[0] && (
-                    <Text style={styles.verseTranslation}>{verse.translations[0].text}</Text>
-                  )}
+                  <Text style={styles.verseArabic}>{verse.arabic1}</Text>
+                  <Text style={styles.verseTranslation}>{verse.english}</Text>
                   <Text style={styles.verseDetails}>
-                    {verse.words?.length || 0} words • Verse {verse.verse_number}
+                    Verse {verse.ayahNo}
                   </Text>
                 </View>
               </View>
@@ -467,10 +550,10 @@ const App: React.FC = () => {
     </ScrollView>
   );
 
-  const handleVerseSelect = async (verse: Verse) => {
+  const handleVerseSelect = async (verse: Ayah) => {
     setSelectedVerse(verse);
     if (selectedChapter) {
-      await loadVerseWords(selectedChapter.id, verse.verse_number);
+      await loadVerseWords(selectedChapter.surahNo, verse.ayahNo);
       navigateTo('listen');
     }
   };
@@ -501,16 +584,24 @@ const App: React.FC = () => {
         
         {selectedVerse && (
           <View style={styles.verseDisplayCard}>
-            <Text style={styles.verseDisplayArabic}>{selectedVerse.text_uthmani_simple}</Text>
-            {selectedVerse.translations && selectedVerse.translations[0] && (
-              <Text style={styles.verseDisplayTranslation}>
-                {selectedVerse.translations[0].text}
-              </Text>
-            )}
+            <Text style={styles.verseDisplayArabic}>{selectedVerse.arabic1}</Text>
+            <Text style={styles.verseDisplayTranslation}>
+              {selectedVerse.english}
+            </Text>
             
             <View style={styles.audioControls}>
-              <TouchableOpacity style={styles.playButton}>
-                <Text style={styles.playButtonText}>▶ Play Recitation</Text>
+              <TouchableOpacity 
+                style={[styles.playButton, audioLoading && styles.playButtonDisabled]}
+                onPress={isPlaying ? stopAudio : playAudio}
+                disabled={audioLoading}
+              >
+                {audioLoading ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.playButtonText}>
+                    {isPlaying ? '⏸ Pause' : '▶ Play Recitation'}
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -1144,6 +1235,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  playButtonDisabled: {
+    backgroundColor: '#9ca3af',
   },
   startLessonButton: {
     backgroundColor: '#10b981',
