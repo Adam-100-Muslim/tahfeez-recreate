@@ -1,5 +1,6 @@
 // AI-powered lesson generator for Quran memorization
 import { Word, Ayah } from './quranApi';
+import HybridQuranService, { HybridWord } from './hybridQuranService';
 
 export interface QuestionOption {
   id: string;
@@ -33,7 +34,7 @@ export class LessonGenerator {
   /**
    * Generate a complete lesson plan for an ayah
    */
-  static generateLessonPlan(ayah: Ayah, words: Word[]): LessonPlan {
+  static async generateLessonPlan(ayah: Ayah, words: HybridWord[]): Promise<LessonPlan> {
     const questions: LessonQuestion[] = [];
     let questionId = 1;
 
@@ -58,17 +59,22 @@ export class LessonGenerator {
 
     // Phase 1: Individual word recognition (Easy)
     validWords.forEach((word, index) => {
+      // Use QuranCloud transliteration if available, otherwise fallback to original
+      const transliterationText = word.source === 'quran-cloud' && word.quranCloudTransliteration 
+        ? word.quranCloudTransliteration 
+        : word.transliteration.text;
+
       // Question: How do we read [Arabic word]?
       questions.push({
         id: `q${questionId++}`,
         type: 'arabic_to_transliteration',
         question: `How do we read ${word.text}?`,
-        correctAnswer: word.transliteration.text,
-        options: this.generateTransliterationOptions(word.transliteration.text),
+        correctAnswer: transliterationText,
+        options: this.generateTransliterationOptions(transliterationText),
         difficulty: 'easy',
         strokesReward: 1,
         arabicText: word.text,
-        transliterationText: word.transliteration.text
+        transliterationText: transliterationText
       });
 
       // Question: Choose the correct option for [Arabic word]
@@ -76,8 +82,8 @@ export class LessonGenerator {
         id: `q${questionId++}`,
         type: 'word_selection',
         question: `Choose the correct option: ${word.text}`,
-        correctAnswer: word.transliteration.text,
-        options: this.generateTransliterationOptions(word.transliteration.text),
+        correctAnswer: transliterationText,
+        options: this.generateTransliterationOptions(transliterationText),
         difficulty: 'easy',
         strokesReward: 1,
         arabicText: word.text
@@ -92,15 +98,19 @@ export class LessonGenerator {
     // Phase 2: Reverse recognition (Easy to Medium)
     validWords.forEach((word, index) => {
       if (index < 3) { // Focus on first few words
+        const transliterationText = word.source === 'quran-cloud' && word.quranCloudTransliteration 
+          ? word.quranCloudTransliteration 
+          : word.transliteration.text;
+
         questions.push({
           id: `q${questionId++}`,
           type: 'transliteration_to_arabic',
-          question: `Write this in Arabic: ${word.transliteration.text}`,
+          question: `Write this in Arabic: ${transliterationText}`,
           correctAnswer: word.text,
           options: this.generateArabicOptions(word.text, validWords),
           difficulty: 'medium',
           strokesReward: 1,
-          transliterationText: word.transliteration.text,
+          transliterationText: transliterationText,
           arabicText: word.text
         });
       }
@@ -114,7 +124,11 @@ export class LessonGenerator {
     // Phase 3: Word combinations (Medium)
     if (validWords.length >= 2) {
       const firstTwoWords = validWords.slice(0, 2);
-      const combinedTransliteration = firstTwoWords.map(w => w.transliteration.text).join(' ');
+      const combinedTransliteration = firstTwoWords.map(w => {
+        return w.source === 'quran-cloud' && w.quranCloudTransliteration 
+          ? w.quranCloudTransliteration 
+          : w.transliteration.text;
+      }).join(' ');
       const combinedArabic = firstTwoWords.map(w => w.text).join(' ');
 
       questions.push({
@@ -133,12 +147,16 @@ export class LessonGenerator {
     // Phase 4: Audio recognition (Medium)
     validWords.forEach((word, index) => {
       if (index < 2) { // First two words
+        const transliterationText = word.source === 'quran-cloud' && word.quranCloudTransliteration 
+          ? word.quranCloudTransliteration 
+          : word.transliteration.text;
+
         questions.push({
           id: `q${questionId++}`,
           type: 'audio_recognition',
           question: `Click on what you hear:`,
-          correctAnswer: word.transliteration.text,
-          options: this.generateTransliterationOptions(word.transliteration.text),
+          correctAnswer: transliterationText,
+          options: this.generateTransliterationOptions(transliterationText),
           audioUrl: word.audio_url,
           difficulty: 'medium',
           strokesReward: 2,
@@ -154,7 +172,11 @@ export class LessonGenerator {
     }
 
     // Phase 5: Full ayah recognition (Hard)
-    const fullVerseTransliteration = validWords.map(w => w.transliteration.text).join(' ');
+    const fullVerseTransliteration = validWords.map(w => {
+      return w.source === 'quran-cloud' && w.quranCloudTransliteration 
+        ? w.quranCloudTransliteration 
+        : w.transliteration.text;
+    }).join(' ');
     const fullVerseArabic = ayah.arabic1 || ayah.arabic2 || '';
 
     // Transliteration of partial verse
@@ -163,9 +185,17 @@ export class LessonGenerator {
         id: `q${questionId++}`,
         type: 'arabic_to_transliteration',
         question: `Write this in transliteration: ${validWords.slice(0, 2).map(w => w.text).join(' ')}`,
-        correctAnswer: validWords.slice(0, 2).map(w => w.transliteration.text).join(' '),
+        correctAnswer: validWords.slice(0, 2).map(w => {
+          return w.source === 'quran-cloud' && w.quranCloudTransliteration 
+            ? w.quranCloudTransliteration 
+            : w.transliteration.text;
+        }).join(' '),
         options: this.generateCombinedTransliterationOptions(
-          validWords.slice(0, 2).map(w => w.transliteration.text).join(' ')
+          validWords.slice(0, 2).map(w => {
+            return w.source === 'quran-cloud' && w.quranCloudTransliteration 
+              ? w.quranCloudTransliteration 
+              : w.transliteration.text;
+          }).join(' ')
         ),
         difficulty: 'hard',
         strokesReward: 3,
@@ -227,7 +257,7 @@ export class LessonGenerator {
   /**
    * Generate Arabic text options (2 wrong + 1 correct)
    */
-  private static generateArabicOptions(correct: string, allWords: Word[]): QuestionOption[] {
+  private static generateArabicOptions(correct: string, allWords: HybridWord[]): QuestionOption[] {
     const otherWords = allWords.filter(w => w.text !== correct).slice(0, 2);
     const wrongOptions = otherWords.length >= 2 
       ? otherWords.map(w => w.text)
@@ -243,7 +273,7 @@ export class LessonGenerator {
   /**
    * Generate combined Arabic options for multiple words
    */
-  private static generateCombinedArabicOptions(correct: string, allWords: Word[]): QuestionOption[] {
+  private static generateCombinedArabicOptions(correct: string, allWords: HybridWord[]): QuestionOption[] {
     const wrong1 = this.shuffleWords(correct);
     const wrong2 = this.addTypo(correct);
 

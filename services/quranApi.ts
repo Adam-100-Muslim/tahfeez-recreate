@@ -34,6 +34,7 @@ export interface Ayah {
   urdu?: string;
   turkish?: string;
   uzbek?: string;
+  transliteration?: string; // Optional transliteration from QuranCloud
 }
 
 export interface SurahComplete {

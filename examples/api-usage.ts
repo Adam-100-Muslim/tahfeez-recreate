@@ -1,16 +1,20 @@
-// Example usage of the updated QuranAPI.pages.dev integration
-import QuranApiService from '../services/quranApi';
-import LessonGenerator from '../services/lessonGenerator';
+// Example usage of the Quran API services
+// This file demonstrates how to use the various API services
+
+import QuranApiService, { Surah, Ayah, Word } from './services/quranApi';
+import HybridQuranService, { HybridWord } from './services/hybridQuranService';
+import LessonGenerator, { LessonPlan } from './services/lessonGenerator';
 
 // Example 1: Get all surahs
 export async function getAllSurahs() {
   try {
-    const surahs = await QuranApiService.getSurahs();
+    // Use hybrid service to get surahs
+    const surahs = await HybridQuranService.getSurahs();
     console.log(`Found ${surahs.length} surahs`);
     
     // Display first few surahs
     surahs.slice(0, 5).forEach(surah => {
-      console.log(`${surah.surahName} (${surah.surahNameArabic}) - ${surah.totalAyah} ayahs`);
+      console.log(`${surah.surahNo}. ${surah.surahName} (${surah.surahNameArabic}) - ${surah.totalAyah} ayahs`);
     });
     
     return surahs;
@@ -23,13 +27,15 @@ export async function getAllSurahs() {
 // Example 2: Get a specific ayah with audio
 export async function getAyahWithAudio(surahNo: number, ayahNo: number) {
   try {
-    // Get the ayah
-    const ayah = await QuranApiService.getAyah(surahNo, ayahNo);
-    console.log(`Ayah ${surahNo}:${ayahNo}: ${ayah.english}`);
-    console.log(`Arabic: ${ayah.arabic1}`);
+    // Use hybrid service to get ayah
+    const ayah = await HybridQuranService.getAyah(surahNo, ayahNo);
     
     // Get audio URL
-    const audioUrl = await QuranApiService.getAyahAudio(surahNo, ayahNo);
+    const audioUrl = await HybridQuranService.getAyahAudio(surahNo, ayahNo);
+    
+    console.log(`Ayah ${surahNo}:${ayahNo} - ${ayah.surahName}`);
+    console.log(`English: ${ayah.english}`);
+    console.log(`Arabic: ${ayah.arabic1}`);
     console.log(`Audio URL: ${audioUrl}`);
     
     return { ayah, audioUrl };
@@ -42,14 +48,14 @@ export async function getAyahWithAudio(surahNo: number, ayahNo: number) {
 // Example 3: Generate a lesson for an ayah
 export async function generateLessonForAyah(surahNo: number, ayahNo: number) {
   try {
-    // Get the ayah
-    const ayah = await QuranApiService.getAyah(surahNo, ayahNo);
+    // Get the ayah using hybrid service
+    const ayah = await HybridQuranService.getAyah(surahNo, ayahNo);
     
-    // Get word breakdown
-    const words = await QuranApiService.getWordByWordBreakdown(surahNo, ayahNo);
+    // Get word breakdown using hybrid service
+    const words = await HybridQuranService.getWordByWordBreakdown(surahNo, ayahNo);
     
-    // Generate lesson plan
-    const lessonPlan = LessonGenerator.generateLessonPlan(ayah, words);
+    // Generate lesson plan (now async)
+    const lessonPlan = await LessonGenerator.generateLessonPlan(ayah, words);
     
     console.log(`Generated lesson for ${lessonPlan.verseKey}`);
     console.log(`Total questions: ${lessonPlan.totalQuestions}`);
@@ -72,7 +78,8 @@ export async function generateLessonForAyah(surahNo: number, ayahNo: number) {
 // Example 4: Get available reciters
 export async function getAvailableReciters() {
   try {
-    const reciters = await QuranApiService.getReciters();
+    // Use hybrid service to get reciters
+    const reciters = await HybridQuranService.getReciters();
     console.log('Available reciters:');
     Object.entries(reciters).forEach(([id, name]) => {
       console.log(`  ${id}: ${name}`);
@@ -88,18 +95,22 @@ export async function getAvailableReciters() {
 // Example 5: Get complete surah
 export async function getCompleteSurah(surahNo: number) {
   try {
-    const surah = await QuranApiService.getSurah(surahNo);
-    console.log(`Surah: ${surah.surahName} (${surah.surahNameArabic})`);
-    console.log(`Revelation place: ${surah.revelationPlace}`);
-    console.log(`Total ayahs: ${surah.totalAyah}`);
+    // Use hybrid service to get verses
+    const verses = await HybridQuranService.getVerses(surahNo);
+    console.log(`Surah ${surahNo}: Found ${verses.length} verses`);
     
-    // Display first ayah
-    if (surah.english.length > 0) {
-      console.log(`First ayah: ${surah.english[0]}`);
-      console.log(`Arabic: ${surah.arabic1[0]}`);
+    if (verses.length > 0) {
+      const firstVerse = verses[0];
+      console.log(`Surah: ${firstVerse.surahName} (${firstVerse.surahNameArabic})`);
+      console.log(`Revelation place: ${firstVerse.revelationPlace}`);
+      console.log(`Total ayahs: ${firstVerse.totalAyah}`);
+      
+      // Display first ayah
+      console.log(`First ayah: ${firstVerse.english}`);
+      console.log(`Arabic: ${firstVerse.arabic1}`);
     }
     
-    return surah;
+    return verses;
   } catch (error) {
     console.error('Error fetching surah:', error);
     throw error;

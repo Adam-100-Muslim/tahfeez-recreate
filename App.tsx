@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View, Text, TouchableOpacity, Image, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { Audio } from 'expo-av';
 import QuranApiService, { Surah, Ayah, Word } from './services/quranApi';
+import HybridQuranService, { HybridWord } from './services/hybridQuranService';
 import LessonGenerator, { LessonPlan, LessonQuestion } from './services/lessonGenerator';
 
 // Types pour la navigation
@@ -22,7 +23,7 @@ const App: React.FC = () => {
   const [selectedChapter, setSelectedChapter] = useState<Surah | null>(null);
   const [verses, setVerses] = useState<Ayah[]>([]);
   const [selectedVerse, setSelectedVerse] = useState<Ayah | null>(null);
-  const [selectedVerseWords, setSelectedVerseWords] = useState<Word[]>([]);
+  const [selectedVerseWords, setSelectedVerseWords] = useState<HybridWord[]>([]);
   const [loading, setLoading] = useState(false);
   
   // Lesson data
@@ -89,7 +90,8 @@ const App: React.FC = () => {
   const loadChapters = async () => {
     setLoading(true);
     try {
-      const chaptersData = await QuranApiService.getSurahs();
+      // Use hybrid service to get chapters
+      const chaptersData = await HybridQuranService.getSurahs();
       setChapters(chaptersData);
     } catch (error) {
       Alert.alert('Error', 'Failed to load Quran chapters. Please check your internet connection.');
@@ -102,32 +104,11 @@ const App: React.FC = () => {
   const loadVerses = async (surahNo: number) => {
     setLoading(true);
     try {
-      // Get the complete surah with all verses
-      const surahData = await QuranApiService.getSurah(surahNo);
-      
-      // Transform the surah data to individual ayah objects
-      const ayahsData: Ayah[] = surahData.english.map((englishText, index) => ({
-        surahName: surahData.surahName,
-        surahNameArabic: surahData.surahNameArabic,
-        surahNameArabicLong: surahData.surahNameArabicLong,
-        surahNameTranslation: surahData.surahNameTranslation,
-        revelationPlace: surahData.revelationPlace,
-        totalAyah: surahData.totalAyah,
-        surahNo: surahData.surahNo,
-        ayahNo: index + 1,
-        audio: surahData.audio,
-        english: englishText,
-        arabic1: surahData.arabic1[index],
-        arabic2: surahData.arabic2[index],
-        bengali: surahData.bengali?.[index],
-        urdu: surahData.urdu?.[index],
-        turkish: surahData.turkish?.[index],
-        uzbek: surahData.uzbek?.[index]
-      }));
-      
-      setVerses(ayahsData);
+      // Use hybrid service to get verses
+      const versesData = await HybridQuranService.getVerses(surahNo);
+      setVerses(versesData);
     } catch (error) {
-      Alert.alert('Error', 'Failed to load verses. Please try again.');
+      Alert.alert('Error', 'Failed to load Quran verses. Please check your internet connection.');
       console.error('Error loading verses:', error);
     } finally {
       setLoading(false);
@@ -137,17 +118,18 @@ const App: React.FC = () => {
   const loadVerseWords = async (surahNo: number, ayahNo: number) => {
     setLoading(true);
     try {
-      const words = await QuranApiService.getWordByWordBreakdown(surahNo, ayahNo);
-      setSelectedVerseWords(words);
+      // Use hybrid service to get word breakdown
+      const wordsData = await HybridQuranService.getWordByWordBreakdown(surahNo, ayahNo);
+      setSelectedVerseWords(wordsData);
     } catch (error) {
-      Alert.alert('Error', 'Failed to load verse details. Please try again.');
+      Alert.alert('Error', 'Failed to load verse words. Please check your internet connection.');
       console.error('Error loading verse words:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const generateLesson = (ayah: Ayah, words: Word[]) => {
+  const generateLesson = async (ayah: Ayah, words: HybridWord[]) => {
     try {
       // Additional validation before generating lesson
       if (!ayah) {
@@ -169,7 +151,8 @@ const App: React.FC = () => {
 
       console.log(`Generating lesson for ayah ${ayah.surahNo}:${ayah.ayahNo} with ${wordsWithTransliteration.length} valid words`);
       
-      const plan = LessonGenerator.generateLessonPlan(ayah, words);
+      // Now generateLessonPlan is async, so we need to await it
+      const plan = await LessonGenerator.generateLessonPlan(ayah, words);
       setLessonPlan(plan);
       setCurrentLessonQuestion(0);
       setLessonAnswers({});
@@ -617,9 +600,10 @@ const App: React.FC = () => {
     </ScrollView>
   );
 
-  const handleStartLesson = () => {
+  const handleStartLesson = async () => {
     if (selectedVerse && selectedVerseWords.length > 0) {
-      generateLesson(selectedVerse, selectedVerseWords);
+      // Now generateLesson is async, so we need to await it
+      await generateLesson(selectedVerse, selectedVerseWords);
       navigateTo('lesson');
     } else {
       Alert.alert('Error', 'Please wait for the verse to load completely.');
